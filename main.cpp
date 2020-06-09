@@ -2,10 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <my_include/gl.h>
-#include <my_include/glu.h>
-#include <my_include/glut.h>
-//#include <GL/glut.h>
+//#include <my_include/gl.h>
+//#include <my_include/glu.h>
+//#include <my_include/glut.h>
+#include <GL/glut.h>
 #include  <math.h>
 #include <time.h>
 
@@ -70,26 +70,26 @@ void kb(unsigned char key, int x, int y)
     if (key=='w')
     {
         node.y+=0.001;
-        ls.get_derivs(node,deriv,0.25);
+        ls.get_derivs_fast(node,deriv,0.25);
         ls.get_derivs_bench(node,deriv_true);
 
     }
     if (key=='s')
     {
         node.y-=0.001;
-        ls.get_derivs(node,deriv,0.25);
+        ls.get_derivs_fast(node,deriv,0.25);
         ls.get_derivs_bench(node,deriv_true);
     }
     if (key=='a')
     {
         node.x-=0.001;
-        ls.get_derivs(node,deriv,0.25);
+        ls.get_derivs_fast(node,deriv,0.25);
         ls.get_derivs_bench(node,deriv_true);
     }
     if (key=='d')
     {
         node.x+=0.001;
-        ls.get_derivs(node,deriv,0.25);
+        ls.get_derivs_fast(node,deriv,0.25);
         ls.get_derivs_bench(node,deriv_true);
     }
     if (key==' ')

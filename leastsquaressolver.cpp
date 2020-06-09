@@ -1,10 +1,10 @@
 #include "leastsquaressolver.h"
 #include <math.h>
 #include <stdio.h>
-#include <my_include/gl.h>
-#include <my_include/glu.h>
-#include <my_include/glut.h>
-//#include <GL/glut.h>
+//#include <my_include/gl.h>
+//#include <my_include/glu.h>
+//#include <my_include/glut.h>
+#include <GL/glut.h>
 
 leastSquaresSolver::leastSquaresSolver()
 {
@@ -191,7 +191,7 @@ void leastSquaresSolver::get_derivs(node3d &p, deriv3D &res,double delta)
 {
     int var_num=VAR_NUM;
     int eq_num=m_p.size();
-    printf("eq_num=%d \n",eq_num);
+   // printf("eq_num=%d \n",eq_num);
     //first index is a row number
     //second index is a column number  M[eq_num][var_num]
     // get Mt*W*M
@@ -253,10 +253,10 @@ void leastSquaresSolver::get_derivs(node3d &p, deriv3D &res,double delta)
                 MWM[i][j]+=M_[i][k]*Inv[k][j];
 
             }
-            printf("%f ",MWM[i][j]);
+        //    printf("%f ",MWM[i][j]);
 
         }
-        printf("\n ");
+      //  printf("\n ");
     }
 
     for (int i=0;i<var_num;i++)
@@ -267,6 +267,77 @@ void leastSquaresSolver::get_derivs(node3d &p, deriv3D &res,double delta)
         }
     }
 }
+
+
+void leastSquaresSolver::get_derivs_fast(node3d &p, deriv3D &res,double delta)
+{
+    int var_num=VAR_NUM;
+    int eq_num=m_p.size();
+   // printf("eq_num=%d \n",eq_num);
+    //first index is a row number
+    //second index is a column number  M[eq_num][var_num]
+    // get Mt*W*M
+    nullify_m(M_0);
+    for (int i=0;i<eq_num;i++)
+    {
+        double dx,dy,dz;
+        dx=m_p[i].x-p.x;
+        dy=m_p[i].y-p.y;
+        dz=m_p[i].z-p.z;
+        double r2=dx*dx+dy*dy+dz*dz;
+        M_0[i][0]=1.0;
+        M_0[i][1]=dx;             M_0[i][2]=dy;       M_0[i][3]=dz;
+        M_0[i][4]=0.5*dx*dx;     M_0[i][5]=dx*dy;   M_0[i][6]=dx*dz;
+        M_0[i][7]=0.5*dy*dy;     M_0[i][8]=dy*dz;   M_0[i][9]=0.5*dz*dz;
+
+        w[i]=exp(-r2/(delta*delta));//1.0;
+
+        b_m[i]=0.0;
+    }
+
+    nullify_m(M_);
+    for (int i=0;i<var_num;i++)
+    {
+        for (int j=0;j<var_num;j++)
+        {
+            for (int n=0;n<eq_num;n++)
+            {
+                M_[i][j]+=M_0[n][i]*M_0[n][j]*w[n];  //its mvm
+            }
+        }
+    }
+
+
+    for (int i=0;i<eq_num;i++)
+    {
+        b_m[i]=m_p[i].f;
+    }
+
+    nullify_v(mwb);
+    for (int i=0;i<var_num;i++)
+    {
+        for (int n=0;n<eq_num;n++)
+        {
+            mwb[i]+=M_0[n][i]*w[n]*b_m[n];  //its mvb
+        }
+    }
+
+    for (int i=0;i<var_num;i++)
+    {
+            b_m[i]=mwb[i];  //its mvb
+
+    }
+    LU_decompose();
+    m_solve();
+
+    for (int i=0;i<var_num;i++)
+    {
+
+            res.d[i]=x_m[i];
+
+    }
+}
+
 
 void leastSquaresSolver::draw_points(double sc)
 {

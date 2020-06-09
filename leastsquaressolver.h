@@ -61,6 +61,7 @@ public:
     void nullify_m(double m[MAX_EQNS][MAX_EQNS]);
     void nullify_v(double v[VAR_NUM]);
     void get_derivs(node3d &p, deriv3D &res, double delta);
+    void get_derivs_fast(node3d &p, deriv3D &res, double delta);
 
     void draw_points(double sc);
     void get_derivs_bench(node3d &p, deriv3D &res);

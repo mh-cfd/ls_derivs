@@ -16,9 +16,9 @@ QMAKE_CXXFLAGS_RELEASE += -O3
 QMAKE_LFLAGS += -O3
 
 
-LIBS += -lOpenGL32 -lGLU32  -lm
-LIBS += -L$$PWD/my_lib -lglut32
+#LIBS += -lOpenGL32 -lGLU32  -lm
+#LIBS += -L$$PWD/my_lib -lglut32
 
 
-#LIBS += -lGL -lGLU -lglut  -lm
+LIBS += -lGL -lGLU -lglut  -lm
 
