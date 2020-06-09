@@ -175,7 +175,7 @@ void leastSquaresSolver::m_invert(void)
     }
 }
 
-void leastSquaresSolver::nullify_m(double m[MAX_EQNS][MAX_EQNS])
+void leastSquaresSolver::nullify_m(double m[MAX_EQNS][VAR_NUM])
 {
     for (int i=0;i<40;i++)
         for(int j=0;j<40;j++)
@@ -338,14 +338,198 @@ void leastSquaresSolver::get_derivs_fast(node3d &p, deriv3D &res,double delta)
     }
 }
 
+void leastSquaresSolver::get_poisson_internal(node3d &p, deriv3D &res, double delta)
+{
+    int var_num=VAR_NUM;
+    int eq_num=m_p.size();
+
+    nullify_m(M_0);
+    for (int i=0;i<eq_num;i++)
+    {
+        double dx,dy,dz;
+        dx=m_p[i].x-p.x;
+        dy=m_p[i].y-p.y;
+        dz=m_p[i].z-p.z;
+        double r2=dx*dx+dy*dy+dz*dz;
+        M_0[i][0]=1.0;
+        M_0[i][1]=dx;             M_0[i][2]=dy;       M_0[i][3]=dz;
+        M_0[i][4]=0.5*dx*dx;     M_0[i][5]=dx*dy;   M_0[i][6]=dx*dz;
+        M_0[i][7]=0.5*dy*dy;     M_0[i][8]=dy*dz;   M_0[i][9]=0.5*dz*dz;
+
+        w[i]=exp(-r2/(delta*delta));//or just 1.0;
+
+        b_m[i]=0.0;
+    }
+    int i=eq_num; //constraint for laplacian
+    eq_num++;
+    M_0[i][0]=0.0;
+    M_0[i][1]=0;             M_0[i][2]=0;       M_0[i][3]=0;
+    M_0[i][4]=1;             M_0[i][5]=0;       M_0[i][6]=0;
+    M_0[i][7]=1;             M_0[i][8]=0;       M_0[i][9]=1;
+
+    w[i]=1.0;
+
+    b_m[i]=0.0;
+
+    nullify_m(M_);
+    for (int i=0;i<var_num;i++)
+    {
+        for (int j=0;j<var_num;j++)
+        {
+            for (int n=0;n<eq_num;n++)
+            {
+                M_[i][j]+=M_0[n][i]*M_0[n][j]*w[n];  //its mvm
+            }
+        }
+    }
+
+
+    for (int i=0;i<eq_num-1;i++)
+    {
+        b_m[i]=m_p[i].f;//from prev interation
+    }
+    b_m[eq_num-1]=p.rhs;//this is the rhs value
+
+
+    nullify_v(mwb);
+    for (int i=0;i<var_num;i++)
+    {
+        for (int n=0;n<eq_num;n++)
+        {
+            mwb[i]+=M_0[n][i]*w[n]*b_m[n];  //its mvb
+        }
+    }
+
+    for (int i=0;i<var_num;i++)
+    {
+            b_m[i]=mwb[i];  //its mvb
+
+    }
+    LU_decompose();
+    m_solve();
+
+    for (int i=0;i<var_num;i++)
+    {
+
+            res.d[i]=x_m[i];
+
+    }
+    p.f=res.d[F];
+}
+
+void leastSquaresSolver::get_poisson_boundary(node3d &p, deriv3D &res, double delta)
+{
+    //we do not chack if p is a boundary point this should be done before calling this function
+
+    int var_num=VAR_NUM;
+    int eq_num=m_p.size();
+
+    nullify_m(M_0);
+    for (int i=0;i<eq_num;i++)
+    {
+        double dx,dy,dz;
+        dx=m_p[i].x-p.x;
+        dy=m_p[i].y-p.y;
+        dz=m_p[i].z-p.z;
+        double r2=dx*dx+dy*dy+dz*dz;
+        M_0[i][0]=1.0;
+        M_0[i][1]=dx;             M_0[i][2]=dy;       M_0[i][3]=dz;
+        M_0[i][4]=0.5*dx*dx;     M_0[i][5]=dx*dy;   M_0[i][6]=dx*dz;
+        M_0[i][7]=0.5*dy*dy;     M_0[i][8]=dy*dz;   M_0[i][9]=0.5*dz*dz;
+
+        w[i]=exp(-r2/(delta*delta));//1.0;  todo: make w anisotrpopic in the direction normal to the wall
+
+        b_m[i]=0.0;
+    }
+    int i=eq_num; //constraint for laplacian
+    eq_num++;
+    M_0[i][0]=0.0;
+    M_0[i][1]=0;             M_0[i][2]=0;       M_0[i][3]=0;
+    M_0[i][4]=1;             M_0[i][5]=0;       M_0[i][6]=0;
+    M_0[i][7]=1;             M_0[i][8]=0;       M_0[i][9]=1;
+
+    w[i]=1.0;//1.0;
+
+    b_m[i]=0.0;
+    /////////////////////
+
+    i=eq_num; //constraint for gradient at the wall
+    eq_num++;
+    M_0[i][0]=0.0;
+    M_0[i][1]=walls[p.is_boundary].nx;             M_0[i][2]=walls[p.is_boundary].ny;       M_0[i][3]=walls[p.is_boundary].nz;
+    M_0[i][4]=0.0;     M_0[i][5]=0.0;   M_0[i][6]=0.0;
+    M_0[i][7]=0.0;     M_0[i][8]=0.0;   M_0[i][9]=0.0;
+
+    w[i]=1.0;//1.0;
+
+    b_m[i]=0.0;
+
+    nullify_m(M_);
+    for (int i=0;i<var_num;i++)
+    {
+        for (int j=0;j<var_num;j++)
+        {
+            for (int n=0;n<eq_num;n++)
+            {
+                M_[i][j]+=M_0[n][i]*M_0[n][j]*w[n];  //its mvm
+            }
+        }
+    }
+
+
+    for (int i=0;i<eq_num-2;i++)
+    {
+        b_m[i]=m_p[i].f;//from prev interation
+    }
+    b_m[eq_num-2]=p.rhs;//from prev interation
+    b_m[eq_num-1]=p.f_bound;//from prev interation
+
+
+
+    nullify_v(mwb);
+    for (int i=0;i<var_num;i++)
+    {
+        for (int n=0;n<eq_num;n++)
+        {
+            mwb[i]+=M_0[n][i]*w[n]*b_m[n];  //its mvb
+        }
+    }
+
+    for (int i=0;i<var_num;i++)
+    {
+            b_m[i]=mwb[i];  //its mvb
+
+    }
+    LU_decompose();
+    m_solve();
+
+    for (int i=0;i<var_num;i++)
+    {
+
+            res.d[i]=x_m[i];
+
+    }
+    p.f=res.d[F];
+}
+
 
 void leastSquaresSolver::draw_points(double sc)
 {
     glPointSize(4);
-    glBegin(GL_POINTS);
+    /*glBegin(GL_POINTS);
     for (int i=0;i<m_p.size();i++)
     {
         glColor3f(m_p[i].f,m_p[i].f,-m_p[i].f);
+        glVertex3f(m_p[i].x,m_p[i].y,m_p[i].z);
+    }
+    glEnd();*/
+
+    glPointSize(4);
+    glBegin(GL_POINTS);
+    for (int i=0;i<m_p.size();i++)
+    {
+        //glColor3f(10.0*m_d0[i].d[F],10.0*m_d0[i].d[F],-10.0*m_d0[i].d[F]);
+        glColor3f(sc*10.0*m_p[i].f,sc*10.0*m_p[i].f,-sc*10.0*m_p[i].f);
         glVertex3f(m_p[i].x,m_p[i].y,m_p[i].z);
     }
     glEnd();
