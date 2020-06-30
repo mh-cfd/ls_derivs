@@ -11,10 +11,12 @@
 
 
 typedef struct
-{double x ,y,z,f;
+{double x ,y,z,f,ax,ay,az;
 int is_boundary; //if<0 than it's not the boundary oterwise it's boundary plane number
 double f_bound;//value of the gradient at the boundary
 double rhs;// value of the rhs for a poisson equation at the boundary
+
+double INV[VAR_NUM][VAR_NUM];
 } node3d;
 
 
@@ -33,15 +35,15 @@ typedef struct
 class leastSquaresSolver
 {
 private:
-    double M_[MAX_EQNS][VAR_NUM],
-           M_0[MAX_EQNS][VAR_NUM],
-           MWM[MAX_EQNS][VAR_NUM],
+    double M_[MAX_EQNS][50],
+           M_0[MAX_EQNS][50],
+           MWM[MAX_EQNS][50],
            x_m[MAX_EQNS],
            b_m[MAX_EQNS],
            w[MAX_EQNS],
            mwb[MAX_EQNS],
-           LU[MAX_EQNS][VAR_NUM],
-           Inv[MAX_EQNS][VAR_NUM];
+           LU[MAX_EQNS][50],
+           Inv[MAX_EQNS][50];
     int ps[MAX_EQNS];
 
 public:
@@ -65,22 +67,36 @@ public:
     std::vector<deriv3D> m_d,m_d0; //derivs cloud
     std::vector<boundary_plane> walls; //all boundaries are here for now
 
+    double pww;
+    double rad;
     void init_with_points();
     void init_for_benchmark();
     void LU_decompose(void);
     void m_solve(void);
     void m_invert(void);
 
-    void nullify_m(double m[MAX_EQNS][VAR_NUM]);
-    void nullify_v(double v[VAR_NUM]);
+    void LU_decompose2(int num);
+    void m_solve2(int num);
+    void m_invert2(int num);
+
+    void nullify_m(double m[MAX_EQNS][50]);
+    void nullify_v(double v[MAX_EQNS]);
     void get_derivs(node3d &p, deriv3D &res, double delta);
     void get_derivs_fast(node3d &p, deriv3D &res, double delta);
+
+            void interpKrig(node3d &p);
+                 void interpKrigDx(node3d &p);
+            double dist(node3d &p1,node3d &p2);
+            double distDx(node3d &p1,node3d &p2);
 
      void get_poisson_internal(node3d &p, deriv3D &res, double delta);
      void get_poisson_boundary(node3d &p, deriv3D &res, double delta);
 
+     void get_poisson_combo(node3d &p, deriv3D &res, double delta);
 
-    void draw_points(double sc);
+     void get_poisson_matr(node3d &p, deriv3D &res, double delta);// only gets the inverse matirx
+     void get_poisson_nomatr(node3d &p, deriv3D &res, double delta); //solves with given inverse matrix;
+     void draw_points(double sc);
     void get_derivs_bench(node3d &p, deriv3D &res);
 };
 
