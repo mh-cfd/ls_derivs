@@ -57,7 +57,7 @@ void display(void)
                    node.z );
     glEnd();*/
 
-  /* glBegin(GL_POINTS);
+   /*glBegin(GL_POINTS);
     for (int i=-100;i<100;i++)
     {
 
@@ -65,6 +65,11 @@ void display(void)
         ls.get_derivs_fast(node,deriv,ls.rad);
         ls.get_derivs_bench(node,deriv_true);
          ls.interpKrigDx(node);
+
+         glColor3f(0,0,1);
+         glVertex3f(node.x ,
+                    node.y + sc*node.f_bound ,
+                    node.z );
 
          glColor3f(1,0,0);
          glVertex3f(node.x ,
@@ -76,19 +81,16 @@ void display(void)
          glVertex3f(node.x  ,
                     node.y + sc*deriv_true.d[leastSquaresSolver::FXX] ,
                     node.z );
-
-
-         glColor3f(0,1,0);
-         glVertex3f(node.x ,
-                    node.y + sc*node.f_bound ,
-                    node.z );
     }
-    glEnd();
-*/
+    glEnd();*/
+
 
     glBegin(GL_POINTS);
-       for (int i=0;i<100;i++)
+
+
+      for (int i=0;i<100;i++)
        {
+
 
            node.x=0.01*i;
 
@@ -96,24 +98,24 @@ void display(void)
 
            ls.get_derivs_fast(node,deriv,ls.rad);
 
-            //ls.interpKrigDx(node);
+            ls.interpKrig_nomatr(node);
 
             glColor3f(1,0,0);
             glVertex3f(node.x-0.5 ,
                        node.y-1.0 + sc*deriv.d[leastSquaresSolver::F] ,
                        node.z );
 
-
             glColor3f(1,1,1);
             glVertex3f(node.x-0.5 ,
                        node.y-1.0 + sc*(cos(M_PI*node.x)/(M_PI*M_PI)),
                        node.z );
 
+            glColor3f(0,1,0);
+            glVertex3f(node.x-0.5 ,
+                       node.y-1.0 + sc*node.f_bound ,
+                       node.z );
 
-            /*glColor3f(0,1,0);
-            glVertex3f(node.x ,
-                       node.y + sc*node.f_bound ,
-                       node.z );*/
+
        }
        glEnd();
 
@@ -144,6 +146,25 @@ void solve_poisson()
 
         ls.m_p[i].f-=f0;
     }
+
+}
+
+
+void solve_poisson_krig()
+{
+// ls.solvePoisson_krig();
+
+    ls.solveKrig_grad(300,1e-3);
+
+ double f0=ls.m_p[0].f;
+ for(int i=0;i<ls.m_p.size();i++)
+ {
+
+     ls.m_p[i].f-=f0 + 1/(M_PI*M_PI);
+ }
+
+
+ printf("solved krig \n");
 
 }
 
@@ -192,6 +213,7 @@ void kb(unsigned char key, int x, int y)
 {
 
 
+
     if (key=='q')
     {
         sc*=1.1;
@@ -203,36 +225,28 @@ void kb(unsigned char key, int x, int y)
     if (key=='w')
     {
         node.y+=0.01;
-        ls.get_derivs_fast(node,deriv,0.15);
-        ls.get_derivs_bench(node,deriv_true);
-         ls.interpKrigDx(node);
+
        // printf("f_true=%f %f %f\n",deriv_true.d[leastSquaresSolver::F],deriv.d[leastSquaresSolver::F],deriv_true.d[leastSquaresSolver::F]-deriv.d[leastSquaresSolver::F]);
 
     }
     if (key=='s')
     {
         node.y-=0.01;
-        ls.get_derivs_fast(node,deriv,0.15);
-        ls.get_derivs_bench(node,deriv_true);
-        ls.interpKrigDx(node);
+
        // printf("f_true=%f %f %f\n",deriv_true.d[leastSquaresSolver::F],deriv.d[leastSquaresSolver::F],deriv_true.d[leastSquaresSolver::F]-deriv.d[leastSquaresSolver::F]);
 
     }
     if (key=='a')
     {
         node.x-=0.01;
-        ls.get_derivs_fast(node,deriv,0.15);
-        ls.get_derivs_bench(node,deriv_true);
-         ls.interpKrigDx(node);
+
       //  printf("f_true=%f %f %f\n",deriv_true.d[leastSquaresSolver::F],deriv.d[leastSquaresSolver::F],deriv_true.d[leastSquaresSolver::F]-deriv.d[leastSquaresSolver::F]);
 
     }
     if (key=='d')
     {
         node.x+=0.01;
-        ls.get_derivs_fast(node,deriv,0.15);
-        ls.get_derivs_bench(node,deriv_true);
-         ls.interpKrigDx(node);
+
        // printf("f_true=%f %f %f\n",deriv_true.d[leastSquaresSolver::F],deriv.d[leastSquaresSolver::F],deriv_true.d[leastSquaresSolver::F]-deriv.d[leastSquaresSolver::F]);
 
     }
@@ -243,7 +257,9 @@ void kb(unsigned char key, int x, int y)
             sweep(1,0.001);*/
         // go =! go;
        // ls.init();
-        solve_poisson();
+        //solve_poisson();
+        solve_poisson_krig();
+
     }
 
 
@@ -255,6 +271,8 @@ void kb(unsigned char key, int x, int y)
         // go =! go;
        // ls.init();
         get_matr_poisson();
+
+        ls.getKrigInv();
     }
 
 
@@ -267,6 +285,7 @@ void kb(unsigned char key, int x, int y)
        // ls.init();
 
         no_matr_poisson(10);
+
 
         printf("done! \n");
     }
@@ -295,6 +314,9 @@ void kb(unsigned char key, int x, int y)
         printf("rad=%f \n",ls.rad);
     }
 
+
+
+
     glutPostRedisplay();
 }
 
@@ -310,7 +332,7 @@ void init()
     node3d n;
     deriv3D d0,d;
     //for derivatives bench:
-    /*for (int i=0;i<39;i++)
+ /*   for (int i=0;i<39;i++)
     {
         n.x=1.0*(rand()*1.0/RAND_MAX-0.5);
         n.y=1.0*(rand()*1.0/RAND_MAX-0.5);
@@ -345,7 +367,7 @@ void init()
     ls.m_d0.push_back(d0);
 
 
-    for (int i=0;i<1000;i++)
+    for (int i=0;i<250;i++)
     {
         n.x=0.0125+(rand()*0.975/RAND_MAX);
         n.y=0.0125+(rand()*0.975/RAND_MAX);
@@ -385,7 +407,7 @@ void init()
     bp.nx=0.0; bp.ny=0.0; bp.nz=1.0; bp.d=0.1; //5 z0
     ls.walls.push_back(bp);
 
-    for (int i=0;i<70;i++)
+    for (int i=0;i<10;i++)
     {
         n.x=0;
         n.y=(rand()*1.0/RAND_MAX);
@@ -455,7 +477,7 @@ void init()
 
     }
 
-    for (int i=0;i<200;i++)
+    for (int i=0;i<50;i++)
     {
         n.x=(rand()*1.0/RAND_MAX);
         n.y=(rand()*1.0/RAND_MAX);
@@ -492,7 +514,8 @@ void init()
     }
 
 
-
+ls.getKrigInv();
+printf("got krig! \n");
 
     glClearColor (0.0, 0.1, 0.0, 0.0);
     glColor3f(1.0, 1.0, 1.0);

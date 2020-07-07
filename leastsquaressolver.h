@@ -79,6 +79,10 @@ public:
     void m_solve2(int num);
     void m_invert2(int num);
 
+    void LU_decompose_krig(int num);
+    void m_solve_krig(int num);
+    void m_invert_krig(int num);
+
     void nullify_m(double m[MAX_EQNS][50]);
     void nullify_v(double v[MAX_EQNS]);
     void get_derivs(node3d &p, deriv3D &res, double delta);
@@ -88,6 +92,7 @@ public:
                  void interpKrigDx(node3d &p);
             double dist(node3d &p1,node3d &p2);
             double distDx(node3d &p1,node3d &p2);
+                 double distLapl(node3d &p1, node3d &p2);
 
      void get_poisson_internal(node3d &p, deriv3D &res, double delta);
      void get_poisson_boundary(node3d &p, deriv3D &res, double delta);
@@ -97,7 +102,15 @@ public:
      void get_poisson_matr(node3d &p, deriv3D &res, double delta);// only gets the inverse matirx
      void get_poisson_nomatr(node3d &p, deriv3D &res, double delta); //solves with given inverse matrix;
      void draw_points(double sc);
-    void get_derivs_bench(node3d &p, deriv3D &res);
+     void get_derivs_bench(node3d &p, deriv3D &res);
+     void getKrigInv();
+     void interpKrig_nomatr(node3d &p);
+
+     void solvePoisson_krig();
+     double distAx(node3d &p1, node3d &p2);
+     double distAy(node3d &p1, node3d &p2);
+     double distAz(node3d &p1, node3d &p2);
+     void solveKrig_grad(int itn, double delta);
 };
 
 #endif // LEASTSQUARESSOLVER_H

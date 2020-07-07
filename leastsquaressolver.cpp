@@ -6,10 +6,14 @@
 //#include <my_include/glut.h>
 #include <GL/glut.h>
 
+
+double LU_krig[3000][3000],M_krig[3000][3000],Inv_krig[3000][3000],M0_krig[3000][3000],Wx_krig[3000][3000],Wy_krig[3000][3000],Wz_krig[3000][3000];
+int ps_krig[3000];
+
 leastSquaresSolver::leastSquaresSolver()
 {
-  pww=0.5;
-  rad=0.05;
+    pww=0.5;
+    rad=0.125;
 }
 
 
@@ -53,7 +57,7 @@ void leastSquaresSolver::init_for_benchmark()
     {
         get_derivs(m_p[i],m_d[i],0.5);
         //printf("i=%d x=%f y=%f z=%f f=%f fx=%f fy=%f fz=%f fnew=%f \n",
-         //      i,m_p[i].x,m_p[i].y,m_p[i].z,m_p[i].f,m_d[i].d[FX],m_d[i].d[FY],m_d[i].d[FZ],m_d[i].d[F]);
+        //      i,m_p[i].x,m_p[i].y,m_p[i].z,m_p[i].f,m_d[i].d[FX],m_d[i].d[FY],m_d[i].d[FZ],m_d[i].d[F]);
     }
 }
 
@@ -300,6 +304,132 @@ void leastSquaresSolver::m_invert2(int num)
 }
 
 
+////////////////Kriging below
+
+void leastSquaresSolver::LU_decompose_krig(int num)
+{
+    int i,j,k,pivotindex;
+    static double scales[3000];
+    double normrow,pivot,size,biggest,mult;
+
+    for (i=0;i<num;i++) //заполнение начальными данными
+    {
+        ps_krig[i]=i;//маппинг изначального порядка на переставленный.
+        normrow=0;//максимум в итой строке
+
+        for (j=0;j<num;j++)
+        {
+            LU_krig[i][j]=M_krig[i][j];
+            if (normrow<fabs(LU_krig[i][j]))
+                normrow=fabs(LU_krig[i][j]);
+        }
+        if (normrow!=0)
+            scales[i]=1.0/normrow;//для общих множителей
+        else
+        {
+            scales[i]=0.0;
+            //     err_code(DIV_ZERO);
+        }
+    }
+    //метод гаусса с частичным упорядочиванием
+
+    for (k=0;k<num-1;k++)
+    {
+        biggest=0;
+        for (i=k; i<num;i++)
+        {
+            size=fabs(LU_krig[ps_krig[i]][k])*scales[ps_krig[i]];
+            if (biggest<size)
+            {
+                biggest=size;
+                pivotindex=i;
+            }
+        }
+
+        if (biggest==0)
+        {
+            //	err_code(1);
+            pivotindex=0;
+        }
+
+        if (pivotindex!=k)
+        {
+            j=ps_krig[k];
+            ps_krig[k]=ps_krig[pivotindex];
+            ps_krig[pivotindex]=j;
+        }
+
+        pivot=LU_krig[ps_krig[k]][k];
+
+        for (i=k+1;i<num;i++)
+        {
+            mult=LU_krig[ps_krig[i]][k]/pivot;
+            LU_krig[ps_krig[i]][k]=mult;
+
+            if (mult!=0.0)
+            {
+                for (j=k+1; j<num;j++)
+                    LU_krig[ps_krig[i]][j]-=mult*LU_krig[ps_krig[k]][j];
+            }
+        }
+    }
+    //      if (LU[ps[VAR_NUM-1]][VAR_NUM-1]==0.0) err_code(1);
+}
+
+void leastSquaresSolver::m_solve_krig(int num)
+{
+    int i,j;
+    double dot;
+
+    for (i=0;i<num;i++)
+    {
+        dot=0;
+        for (j=0;j<i;j++)
+            dot+=LU_krig[ps_krig[i]][j]*x_m[j];
+
+        x_m[i]=b_m[ps_krig[i]]-dot;
+    }
+
+    for (i=num-1; i>=0;i--)
+    {
+        dot=0.0;
+
+        for (j=i+1;j<num;j++)
+            dot+=LU_krig[ps_krig[i]][j]*x_m[j];
+
+        x_m[i]=(x_m[i]-dot)/LU_krig[ps_krig[i]][i];
+    }
+}
+
+
+
+void leastSquaresSolver::m_invert_krig(int num)
+{
+
+    int i,j;
+    //err_code(1);
+    LU_decompose_krig(num);
+
+    for (j=0;j<num;j++)
+    {
+
+        for (i=0;i<num;i++)
+        {
+            if (i==j)
+                b_m[i]=1;
+            else
+                b_m[i]=0;
+        }
+
+        m_solve_krig(num);
+
+        for (i=0;i<num;i++)
+            Inv_krig[i][j]=x_m[i];
+    }
+}
+
+///////////////Kriging above
+
 void leastSquaresSolver::nullify_m(double m[MAX_EQNS][50])
 {
     for (int i=0;i<40;i++)
@@ -316,7 +446,7 @@ void leastSquaresSolver::get_derivs(node3d &p, deriv3D &res,double delta)
 {
     int var_num=VAR_NUM;
     int eq_num=m_p.size();
-   // printf("eq_num=%d \n",eq_num);
+    // printf("eq_num=%d \n",eq_num);
     //first index is a row number
     //second index is a column number  M[eq_num][var_num]
     // get Mt*W*M
@@ -378,10 +508,10 @@ void leastSquaresSolver::get_derivs(node3d &p, deriv3D &res,double delta)
                 MWM[i][j]+=M_[i][k]*Inv[k][j];
 
             }
-        //    printf("%f ",MWM[i][j]);
+            //    printf("%f ",MWM[i][j]);
 
         }
-      //  printf("\n ");
+        //  printf("\n ");
     }
 
     for (int i=0;i<var_num;i++)
@@ -398,7 +528,7 @@ void leastSquaresSolver::get_derivs_fast(node3d &p, deriv3D &res,double delta)
 {
     int var_num=VAR_NUM;
     int eq_num=m_p.size();
-   // printf("eq_num=%d \n",eq_num);
+    // printf("eq_num=%d \n",eq_num);
     //first index is a row number
     //second index is a column number  M[eq_num][var_num]
     // get Mt*W*M
@@ -449,7 +579,7 @@ void leastSquaresSolver::get_derivs_fast(node3d &p, deriv3D &res,double delta)
 
     for (int i=0;i<var_num;i++)
     {
-            b_m[i]=mwb[i];  //its mvb
+        b_m[i]=mwb[i];  //its mvb
 
     }
     LU_decompose();
@@ -458,7 +588,7 @@ void leastSquaresSolver::get_derivs_fast(node3d &p, deriv3D &res,double delta)
     for (int i=0;i<var_num;i++)
     {
 
-            res.d[i]=x_m[i];
+        res.d[i]=x_m[i];
 
     }
 }
@@ -476,24 +606,125 @@ double leastSquaresSolver::dist(node3d &p1,node3d &p2)
 
 double leastSquaresSolver::distDx(node3d &p1,node3d &p2)
 {
-   // return (p1.x - p2.x)/sqrt((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z));
-   //  2.0*(p1.x - p2.x);
-   // pow((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z),0.25);
+    // return (p1.x - p2.x)/sqrt((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z));
+    //  2.0*(p1.x - p2.x);
+    // pow((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z),0.25);
 
 
     //first deriv
-  // return pww*2.0*(p1.x - p2.x)/pow((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z),1.0-pww);
+    // return pww*2.0*(p1.x - p2.x)/pow((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z),1.0-pww);
 
 
     double dx=(p1.x - p2.x);
-    double r2=dx*dx + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z);
+    double r2=dx*dx + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z)+rad*rad;
 
     //zero deriv
     //return pow(r2,pww-1);
     //first driv
     //return pww*2.0*dx*pow(r2,pww-1.0);
-     //second deriv
+    //second deriv
     return pww*2.0*pow(r2,pww-1) + 2.0*pww*dx*2.0*(pww-1.0)*dx*pow(r2,pww-2.0);
+}
+
+
+double leastSquaresSolver::distAx(node3d &p1,node3d &p2)
+{
+    // return (p1.x - p2.x)/sqrt((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z));
+    //  2.0*(p1.x - p2.x);
+    // pow((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z),0.25);
+
+
+    //first deriv
+    // return pww*2.0*(p1.x - p2.x)/pow((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z),1.0-pww);
+
+
+    double dx=(p1.x - p2.x);
+    double dy=(p1.y - p2.y);
+    double dz=(p1.z - p2.z);
+    double r2=dx*dx + dy*dy + dz*dz + rad*rad;
+
+    //zero deriv
+    //return pow(r2,pww-1);
+    //first driv
+    return pww*2.0*dx*pow(r2,pww-1.0);
+    //second deriv
+
+}
+
+double leastSquaresSolver::distAy(node3d &p1,node3d &p2)
+{
+    // return (p1.x - p2.x)/sqrt((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z));
+    //  2.0*(p1.x - p2.x);
+    // pow((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z),0.25);
+
+
+    //first deriv
+    // return pww*2.0*(p1.x - p2.x)/pow((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z),1.0-pww);
+
+
+    double dx=(p1.x - p2.x);
+    double dy=(p1.y - p2.y);
+    double dz=(p1.z - p2.z);
+    double r2=dx*dx + dy*dy + dz*dz + rad*rad;
+
+    //zero deriv
+    //return pow(r2,pww-1);
+    //first driv
+    return pww*2.0*dy*pow(r2,pww-1.0);
+    //second deriv
+
+}
+
+double leastSquaresSolver::distAz(node3d &p1,node3d &p2)
+{
+    // return (p1.x - p2.x)/sqrt((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z));
+    //  2.0*(p1.x - p2.x);
+    // pow((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z),0.25);
+
+
+    //first deriv
+    // return pww*2.0*(p1.x - p2.x)/pow((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z),1.0-pww);
+
+
+    double dx=(p1.x - p2.x);
+    double dy=(p1.y - p2.y);
+    double dz=(p1.z - p2.z);
+    double r2=dx*dx + dy*dy + dz*dz + rad*rad;
+
+    //zero deriv
+    //return pow(r2,pww-1);
+    //first driv
+    return pww*2.0*dz*pow(r2,pww-1.0);
+    //second deriv
+
+}
+
+double leastSquaresSolver::distLapl(node3d &p1,node3d &p2)
+{
+    // return (p1.x - p2.x)/sqrt((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z));
+    //  2.0*(p1.x - p2.x);
+    // pow((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z),0.25);
+
+
+    //first deriv
+    // return pww*2.0*(p1.x - p2.x)/pow((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) + (p1.z - p2.z) * (p1.z - p2.z),1.0-pww);
+
+
+    double dx=(p1.x - p2.x);
+    double dy=(p1.y - p2.y);
+    double dz=(p1.z - p2.z);
+    double r2=dx*dx + dy*dy + dz*dz + rad*rad;
+
+    //zero deriv
+    //return pow(r2,pww-1);
+    //first driv
+    //return pww*2.0*dx*pow(r2,pww-1.0);
+    //second deriv
+    double d2x=pww*2.0*pow(r2,pww-1) + 2.0*pww*dx*2.0*(pww-1.0)*dx*pow(r2,pww-2.0);
+    double d2y=pww*2.0*pow(r2,pww-1) + 2.0*pww*dy*2.0*(pww-1.0)*dy*pow(r2,pww-2.0);
+    double d2z=pww*2.0*pow(r2,pww-1) + 2.0*pww*dz*2.0*(pww-1.0)*dz*pow(r2,pww-2.0);
+
+    return d2x+d2y+d2z;
 }
 
 void leastSquaresSolver::interpKrig(node3d &p)
@@ -532,7 +763,7 @@ void leastSquaresSolver::interpKrig(node3d &p)
     {
         p.f_bound+=m_p.at(i).f * x_m[i];
     }
-//printf("pf=%f \n", p.f);
+    //printf("pf=%f \n", p.f);
 }
 
 
@@ -572,9 +803,293 @@ void leastSquaresSolver::interpKrigDx(node3d &p)
     {
         p.f_bound+=m_p.at(i).f * x_m[i];
     }
-//printf("pf=%f \n", p.f);
+    //printf("pf=%f \n", p.f);
 }
 
+
+void leastSquaresSolver::getKrigInv()
+{
+    int size=m_p.size()+1;
+
+    for (int i=0;i<size-1;i++)
+    {
+        M_krig[i][i] = 0;
+        for (int j=0;j<i;j++)
+        {
+            M_krig[i][j] = M_krig[j][i] = dist(m_p.at(i), m_p.at(j));
+        }
+    }
+    for (int i=0;i<size;i++)
+    {
+        M_krig[i][size-1] = M_krig[size-1][i] = 1.0;
+    }
+    M_krig[size-1][size-1] = 0;
+
+
+    LU_decompose_krig(size);
+    printf("got krig LU \n");
+    for (int j=0;j<size-1;j++)
+    {
+        for (int i=0;i<size-1;i++)
+        {
+            b_m[i]=distAx(m_p.at(j), m_p.at(i));//distAx(p, m_p.at(i));
+            //printf("b_m=%f \n", b_m[i]);
+        }
+        b_m[size-1] = 1.0;
+        m_solve_krig(size);
+        for (int i=0;i<size-1;i++)
+        {
+            Wx_krig[j][i]=x_m[i];
+        }
+
+        for (int i=0;i<size-1;i++)
+        {
+            b_m[i]=distAy(m_p.at(j), m_p.at(i));//distAx(p, m_p.at(i));
+            //printf("b_m=%f \n", b_m[i]);
+        }
+        b_m[size-1] = 1.0;
+        m_solve_krig(size);
+        for (int i=0;i<size-1;i++)
+        {
+            Wy_krig[j][i]=x_m[i];
+        }
+
+        for (int i=0;i<size-1;i++)
+        {
+            b_m[i]=distAz(m_p.at(j), m_p.at(i));//distAx(p, m_p.at(i));
+            //printf("b_m=%f \n", b_m[i]);
+        }
+        b_m[size-1] = 1.0;
+        m_solve_krig(size);
+        for (int i=0;i<size-1;i++)
+        {
+            Wz_krig[j][i]=x_m[i];
+        }
+    }
+    printf("got krig W \n");
+
+
+}
+
+
+void leastSquaresSolver::interpKrig_nomatr(node3d &p)
+{
+
+    /* int size=m_p.size()+1;
+
+    //ax:
+    for (int i=0;i<size-1;i++)
+    {
+        b_m[i]=dist(p, m_p.at(i));
+        //printf("b_m=%f \n", b_m[i]);
+    }
+    b_m[size-1] = 1.0;
+
+
+    m_solve_krig(size);
+
+
+    //ay:
+    p.f_bound = 0;
+    for (int i=0;i<size-1;i++)
+    {
+        p.f_bound+=m_p.at(i).f * x_m[i];
+    }
+*/
+
+
+    int size=m_p.size()+1;
+
+    /*  for (int i=0;i<size-1;i++)
+    {
+        M_krig[i][i] = 0;
+        for (int j=0;j<i;j++)
+        {
+            M_krig[i][j] = M_krig[j][i] = dist(m_p.at(i), m_p.at(j));
+        }
+    }
+    for (int i=0;i<size;i++)
+    {
+        M_krig[i][size-1] = M_krig[size-1][i] = 1.0;
+    }
+    M_krig[size-1][size-1] = 0;*/
+
+    //getKrigInv();
+
+    //LU_decompose_krig(size);
+    //ax:
+    for (int i=0;i<size-1;i++)
+    {
+        b_m[i]=dist(p, m_p.at(i));
+        //printf("b_m=%f \n", b_m[i]);
+    }
+    b_m[size-1] = 1.0;
+
+    //getKrigInv();
+    m_solve_krig(size);
+
+
+    //ay:
+    p.f_bound = 0;
+    for (int i=0;i<size-1;i++)
+    {
+        p.f_bound+=m_p.at(i).f * x_m[i];
+    }
+}
+
+
+double f_krig[3000], df_krig[3000],df1_krig[3000];
+void leastSquaresSolver::solveKrig_grad(int itn,double d)
+{
+    int size=m_p.size()+1;
+    for (int n=0;n<size-1; n++)
+    {
+        f_krig[n]=m_p.at(n).f;
+        df_krig[n]=0.0;
+    }
+    double delta=d;
+    for (int nn=0;nn<itn;nn++)
+    {
+        //delta=delta*1.01;
+        for (int j=0;j<size-1;j++)
+        {
+            double ax,ay,az;
+            ax=m_p.at(j).ax;
+            ay=m_p.at(j).ay;
+            az=m_p.at(j).az;
+
+            double fwx,fwy,fwz;
+            fwx=0.0; fwy=0.0;fwz=0.0;
+            for (int k=0;k<size-1;k++)
+            {
+                fwx+=f_krig[k]*Wx_krig[j][k];
+                fwy+=f_krig[k]*Wy_krig[j][k];
+                fwz+=f_krig[k]*Wz_krig[j][k];
+            }
+            fwx-=ax;
+            fwy-=ay;
+            fwz-=az;
+
+            printf("fwx = %e,fwy=%e,fwz=%e \n",fwx,fwy,fwz);
+
+           for (int i=0;i<size-1;i++)
+             {
+               //if (i!=j)
+                //df_krig[i]+=fwx*Wx_krig[j][i] + fwy*Wy_krig[j][i]  + fwz*Wz_krig[j][i] ;
+               df_krig[i]+=fwx*Wx_krig[j][i] + fwy*Wy_krig[j][i]  + fwz*Wz_krig[j][i] ;
+
+               //double df=fwx*Wx_krig[j][i] + fwy*Wy_krig[j][i]  + fwz*Wz_krig[j][i] ;
+               //f_krig[i]-=df*delta;
+            }
+        }
+        for (int i=0;i<size-1;i++)
+        {
+           f_krig[i]-=df_krig[i]*delta;
+           df_krig[i]=0.0;
+        }
+    }
+
+    for (int i=0;i<size-1;i++)
+    {
+        m_p.at(i).f=f_krig[i];
+    }
+}
+
+double x_lapl[3000], x_dx[3000],x_dy[3000],x_dz[3000];
+
+void leastSquaresSolver::solvePoisson_krig()
+{
+
+
+    int size=m_p.size()+1;
+
+
+    double lapl,f_lapl;
+    double ax,f_ax;
+    double ay,f_ay;
+    double az,f_az;
+
+    for (int n=0;n<size-1; n++)
+    {
+        for (int i=0;i<size-1;i++)
+        {
+            b_m[i]=distLapl(m_p.at(n), m_p.at(i));
+        }
+        b_m[size-1] = 1.0;
+        m_solve_krig(size);
+        lapl = 0.0;
+
+        for (int i=0;i<size-1;i++)
+        {
+            if (i!=n)
+                lapl+=m_p.at(i).f * x_m[i];
+        }
+        //lapl+m_p.at(n).f*x_m[n]=m_p.at(n).rhs;
+        f_lapl=(m_p.at(n).rhs-lapl)/x_m[n];
+
+
+        for (int i=0;i<size-1;i++)
+        {
+            b_m[i]=distAx(m_p.at(n), m_p.at(i));
+        }
+        b_m[size-1] = 1.0;
+        m_solve_krig(size);
+        ax = 0.0;
+
+        for (int i=0;i<size-1;i++)
+        {
+            if (i!=n)
+                ax+=m_p.at(i).f * x_m[i];
+        }
+        //lapl+m_p.at(n).f*x_m[n]=m_p.at(n).rhs;
+        f_ax=(m_p.at(n).ax-ax)/x_m[n];
+
+
+
+        for (int i=0;i<size-1;i++)
+        {
+            b_m[i]=distAy(m_p.at(n), m_p.at(i));
+        }
+        b_m[size-1] = 1.0;
+        m_solve_krig(size);
+        ay = 0.0;
+
+        for (int i=0;i<size-1;i++)
+        {
+            if (i!=n)
+                ay+=m_p.at(i).f * x_m[i];
+        }
+        //lapl+m_p.at(n).f*x_m[n]=m_p.at(n).rhs;
+        f_ay=(m_p.at(n).ay-ay)/x_m[n];
+
+
+
+
+        for (int i=0;i<size-1;i++)
+        {
+            b_m[i]=distAz(m_p.at(n), m_p.at(i));
+        }
+        b_m[size-1] = 1.0;
+        m_solve_krig(size);
+        az = 0.0;
+
+        for (int i=0;i<size-1;i++)
+        {
+            if (i!=n)
+                az+=m_p.at(i).f * x_m[i];
+        }
+        //lapl+m_p.at(n).f*x_m[n]=m_p.at(n).rhs;
+        f_az=(m_p.at(n).az-az)/x_m[n];
+
+
+        m_p.at(n).f=m_p.at(n).f*0.5+ 0.5*(f_lapl);//*0.5+(0.5/3.0)*(f_ax+f_ay+f_az));
+    }
+}
+
+
+
+
+/////////////////////
 
 void leastSquaresSolver::get_poisson_internal(node3d &p, deriv3D &res, double delta)
 {
@@ -640,7 +1155,7 @@ void leastSquaresSolver::get_poisson_internal(node3d &p, deriv3D &res, double de
 
     for (int i=0;i<var_num;i++)
     {
-            b_m[i]=mwb[i];  //its mvb
+        b_m[i]=mwb[i];  //its mvb
 
     }
     LU_decompose();
@@ -649,7 +1164,7 @@ void leastSquaresSolver::get_poisson_internal(node3d &p, deriv3D &res, double de
     for (int i=0;i<var_num;i++)
     {
 
-            res.d[i]=x_m[i];
+        res.d[i]=x_m[i];
 
     }
     p.f=res.d[F];
@@ -735,7 +1250,7 @@ void leastSquaresSolver::get_poisson_boundary(node3d &p, deriv3D &res, double de
 
     for (int i=0;i<var_num;i++)
     {
-            b_m[i]=mwb[i];  //its mvb
+        b_m[i]=mwb[i];  //its mvb
 
     }
     LU_decompose();
@@ -744,7 +1259,7 @@ void leastSquaresSolver::get_poisson_boundary(node3d &p, deriv3D &res, double de
     for (int i=0;i<var_num;i++)
     {
 
-            res.d[i]=x_m[i];
+        res.d[i]=x_m[i];
 
     }
     p.f=res.d[F];
@@ -1093,11 +1608,12 @@ void leastSquaresSolver::draw_points(double sc)
     {
         //glColor3f(10.0*m_d0[i].d[F],10.0*m_d0[i].d[F],-10.0*m_d0[i].d[F]);
         glColor3f(sc*10.0*m_p[i].f,sc*10.0*m_p[i].f,-sc*10.0*m_p[i].f);
+        //glColor3f(1,1,0);
         glVertex3f(m_p[i].x,m_p[i].y,m_p[i].z);
     }
     glEnd();
 
-   /* glBegin(GL_LINES);
+    /* glBegin(GL_LINES);
     for (int i=0;i<m_p.size();i++)
     {
         glColor3f(1,1,1);
