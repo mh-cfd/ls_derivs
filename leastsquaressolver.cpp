@@ -7,8 +7,8 @@
 #include <GL/glut.h>
 
 
-double LU_krig[3000][3000],M_krig[3000][3000],Inv_krig[3000][3000],M0_krig[3000][3000],Wx_krig[3000][3000],Wy_krig[3000][3000],Wz_krig[3000][3000];
-int ps_krig[3000];
+double LU_krig[3000][3000],LU_krig2[3000][3000],M_krig[3000][3000],Inv_krig[3000][3000],M0_krig[3000][3000],Wx_krig[3000][3000],Wy_krig[3000][3000],Wz_krig[3000][3000];
+int ps_krig[3000],ps_krig2[3000];
 
 leastSquaresSolver::leastSquaresSolver()
 {
@@ -305,6 +305,104 @@ void leastSquaresSolver::m_invert2(int num)
 
 
 ////////////////Kriging below
+
+void leastSquaresSolver::LU_decompose_krig_2(int num)
+{
+    int i,j,k,pivotindex;
+    static double scales[3000];
+    double normrow,pivot,size,biggest,mult;
+
+    for (i=0;i<num;i++) //заполнение начальными данными
+    {
+        ps_krig2[i]=i;//маппинг изначального порядка на переставленный.
+        normrow=0;//максимум в итой строке
+
+        for (j=0;j<num;j++)
+        {
+            LU_krig2[i][j]=M_krig[i][j];
+            if (normrow<fabs(LU_krig2[i][j]))
+                normrow=fabs(LU_krig2[i][j]);
+        }
+        if (normrow!=0)
+            scales[i]=1.0/normrow;//для общих множителей
+        else
+        {
+            scales[i]=0.0;
+            //     err_code(DIV_ZERO);
+        }
+    }
+    //метод гаусса с частичным упорядочиванием
+
+    for (k=0;k<num-1;k++)
+    {
+        biggest=0;
+        for (i=k; i<num;i++)
+        {
+            size=fabs(LU_krig2[ps_krig2[i]][k])*scales[ps_krig2[i]];
+            if (biggest<size)
+            {
+                biggest=size;
+                pivotindex=i;
+            }
+        }
+
+        if (biggest==0)
+        {
+            //	err_code(1);
+            pivotindex=0;
+        }
+
+        if (pivotindex!=k)
+        {
+            j=ps_krig2[k];
+            ps_krig2[k]=ps_krig2[pivotindex];
+            ps_krig2[pivotindex]=j;
+        }
+
+        pivot=LU_krig2[ps_krig2[k]][k];
+
+        for (i=k+1;i<num;i++)
+        {
+            mult=LU_krig2[ps_krig2[i]][k]/pivot;
+            LU_krig2[ps_krig2[i]][k]=mult;
+
+            if (mult!=0.0)
+            {
+                for (j=k+1; j<num;j++)
+                    LU_krig2[ps_krig2[i]][j]-=mult*LU_krig2[ps_krig2[k]][j];
+            }
+        }
+    }
+    //      if (LU[ps[VAR_NUM-1]][VAR_NUM-1]==0.0) err_code(1);
+}
+
+void leastSquaresSolver::m_solve_krig_2(int num)
+{
+    int i,j;
+    double dot;
+
+    for (i=0;i<num;i++)
+    {
+        dot=0;
+        for (j=0;j<i;j++)
+            dot+=LU_krig2[ps_krig2[i]][j]*x_m[j];
+
+        x_m[i]=b_m[ps_krig2[i]]-dot;
+    }
+
+    for (i=num-1; i>=0;i--)
+    {
+        dot=0.0;
+
+        for (j=i+1;j<num;j++)
+            dot+=LU_krig2[ps_krig2[i]][j]*x_m[j];
+
+        x_m[i]=(x_m[i]-dot)/LU_krig2[ps_krig2[i]][i];
+    }
+}
+
+
+
 
 void leastSquaresSolver::LU_decompose_krig(int num)
 {
@@ -874,62 +972,17 @@ void leastSquaresSolver::getKrigInv()
 
 void leastSquaresSolver::interpKrig_nomatr(node3d &p)
 {
-
-    /* int size=m_p.size()+1;
-
-    //ax:
-    for (int i=0;i<size-1;i++)
-    {
-        b_m[i]=dist(p, m_p.at(i));
-        //printf("b_m=%f \n", b_m[i]);
-    }
-    b_m[size-1] = 1.0;
-
-
-    m_solve_krig(size);
-
-
-    //ay:
-    p.f_bound = 0;
-    for (int i=0;i<size-1;i++)
-    {
-        p.f_bound+=m_p.at(i).f * x_m[i];
-    }
-*/
-
-
     int size=m_p.size()+1;
 
-    /*  for (int i=0;i<size-1;i++)
-    {
-        M_krig[i][i] = 0;
-        for (int j=0;j<i;j++)
-        {
-            M_krig[i][j] = M_krig[j][i] = dist(m_p.at(i), m_p.at(j));
-        }
-    }
-    for (int i=0;i<size;i++)
-    {
-        M_krig[i][size-1] = M_krig[size-1][i] = 1.0;
-    }
-    M_krig[size-1][size-1] = 0;*/
-
-    //getKrigInv();
-
-    //LU_decompose_krig(size);
-    //ax:
     for (int i=0;i<size-1;i++)
     {
         b_m[i]=dist(p, m_p.at(i));
-        //printf("b_m=%f \n", b_m[i]);
+
     }
     b_m[size-1] = 1.0;
 
-    //getKrigInv();
     m_solve_krig(size);
 
-
-    //ay:
     p.f_bound = 0;
     for (int i=0;i<size-1;i++)
     {
@@ -972,26 +1025,117 @@ void leastSquaresSolver::solveKrig_grad(int itn,double d)
 
             printf("fwx = %e,fwy=%e,fwz=%e \n",fwx,fwy,fwz);
 
-           for (int i=0;i<size-1;i++)
-             {
-               //if (i!=j)
+            for (int i=0;i<size-1;i++)
+            {
+                //if (i!=j)
                 //df_krig[i]+=fwx*Wx_krig[j][i] + fwy*Wy_krig[j][i]  + fwz*Wz_krig[j][i] ;
-               df_krig[i]+=fwx*Wx_krig[j][i] + fwy*Wy_krig[j][i]  + fwz*Wz_krig[j][i] ;
+                df_krig[i]+=fwx*Wx_krig[j][i] + fwy*Wy_krig[j][i]  + fwz*Wz_krig[j][i] ;
 
-               //double df=fwx*Wx_krig[j][i] + fwy*Wy_krig[j][i]  + fwz*Wz_krig[j][i] ;
-               //f_krig[i]-=df*delta;
+                //double df=fwx*Wx_krig[j][i] + fwy*Wy_krig[j][i]  + fwz*Wz_krig[j][i] ;
+                //f_krig[i]-=df*delta;
             }
         }
         for (int i=0;i<size-1;i++)
         {
-           f_krig[i]-=df_krig[i]*delta;
-           df_krig[i]=0.0;
+            f_krig[i]-=df_krig[i]*delta;
+            df_krig[i]=0.0;
         }
     }
 
     for (int i=0;i<size-1;i++)
     {
         m_p.at(i).f=f_krig[i];
+    }
+}
+
+
+void leastSquaresSolver::solveKrig_ls()
+{
+
+    int var_num=m_p.size();
+    int eq_num=m_p.size()*3;
+     printf("var_num= %d eq_num=%d \n",var_num,eq_num);
+    //first index is a row number
+    //second index is a column number  M[eq_num][var_num]
+    // get Mt*W*M
+    for (int j=0;j<var_num;j++)
+    {
+        int i=0;
+        for (int ii=0;ii<var_num;ii++)
+        {
+            M_krig[i][j]=0.0;
+            M0_krig[i][j]=Wx_krig[ii][j];
+            i++;
+        }
+        for (int ii=0;ii<var_num;ii++)
+        {
+            M_krig[i][j]=0.0;
+            M0_krig[i][j]=Wy_krig[ii][j];
+            i++;
+        }
+        for (int ii=0;ii<var_num;ii++)
+        {
+            M_krig[i][j]=0.0;
+            M0_krig[i][j]=Wz_krig[ii][j];
+            i++;
+        }
+
+    }
+
+    for (int i=0;i<var_num;i++)
+    {
+        for (int j=0;j<var_num;j++)
+        {
+            for (int n=0;n<eq_num;n++)
+            {
+                M_krig[i][j]+=M0_krig[n][i]*M0_krig[n][j];  //its mvm
+            }
+        }
+    }
+
+
+    int i=0;
+    for (int ii=0;ii<var_num;ii++)
+    {
+        b_m[i]=m_p[ii].ax;
+        i++;
+    }
+    for (int ii=0;ii<var_num;ii++)
+    {
+        b_m[i]=m_p[ii].ay;
+        i++;
+    }
+    for (int ii=0;ii<var_num;ii++)
+    {
+        b_m[i]=m_p[ii].az;
+        i++;
+    }
+   printf("imax=%d \n",i);
+
+
+    for (int i=0;i<var_num;i++)
+    {
+        mwb[i]=0.0;
+        for (int n=0;n<eq_num;n++)
+        {
+            mwb[i]+=M0_krig[n][i]*b_m[n];  //its mvb
+        }
+    }
+
+    for (int i=0;i<var_num;i++)
+    {
+        b_m[i]=mwb[i];  //its mvb
+
+    }
+    printf("befire LU \n");
+    LU_decompose_krig_2(var_num);
+    printf("befire solve \n");
+    m_solve_krig_2(var_num);
+    printf("after sovle \n");
+
+    for (int i=0;i<var_num;i++)
+    {
+       m_p.at(i).f=x_m[i];
     }
 }
 

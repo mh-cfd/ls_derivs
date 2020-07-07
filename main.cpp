@@ -154,7 +154,8 @@ void solve_poisson_krig()
 {
 // ls.solvePoisson_krig();
 
-    ls.solveKrig_grad(300,1e-3);
+   // ls.solveKrig_grad(300,1e-3);
+    ls.solveKrig_ls();
 
  double f0=ls.m_p[0].f;
  for(int i=0;i<ls.m_p.size();i++)

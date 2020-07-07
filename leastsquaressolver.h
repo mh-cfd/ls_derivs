@@ -83,6 +83,9 @@ public:
     void m_solve_krig(int num);
     void m_invert_krig(int num);
 
+    void LU_decompose_krig_2(int num);
+    void m_solve_krig_2(int num);
+
     void nullify_m(double m[MAX_EQNS][50]);
     void nullify_v(double v[MAX_EQNS]);
     void get_derivs(node3d &p, deriv3D &res, double delta);
@@ -111,6 +114,7 @@ public:
      double distAy(node3d &p1, node3d &p2);
      double distAz(node3d &p1, node3d &p2);
      void solveKrig_grad(int itn, double delta);
+     void solveKrig_ls();
 };
 
 #endif // LEASTSQUARESSOLVER_H
