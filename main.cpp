@@ -33,30 +33,7 @@ void display(void)
     glLineWidth(1.0);
     glPointSize(2.0);
 
-    /*glBegin(GL_LINES);
-        glColor3f(1,0,0);
-        glVertex3f(node.x,node.y,node.z);
-        glColor3f(1,0,0);
-        glVertex3f(node.x ,
-                   node.y + sc*deriv.d[leastSquaresSolver::FX] ,
-                   node.z );
-
-        glColor3f(1,1,1);
-        glVertex3f(node.x+0.01,node.y,node.z);
-        glColor3f(1,1,1);
-        glVertex3f(node.x+0.01  ,
-                   node.y + sc*deriv_true.d[leastSquaresSolver::FX] ,
-                   node.z );
-
-
-        glColor3f(0,1,0);
-        glVertex3f(node.x-0.01,node.y,node.z);
-        glColor3f(0,1,0);
-        glVertex3f(node.x-0.01 ,
-                   node.y + sc*node.f_bound ,
-                   node.z );
-    glEnd();*/
-
+  
    /*glBegin(GL_POINTS);
     for (int i=-100;i<100;i++)
     {
